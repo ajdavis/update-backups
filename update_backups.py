@@ -1,15 +1,12 @@
 from __future__ import print_function
 
-# Adapted from Google's "Python spreadsheets quick start".
-
 import argparse
-import httplib2
 import os
-
-from apiclient import discovery
 from datetime import datetime
-from oauth2client import client
-from oauth2client import tools
+
+import httplib2
+from apiclient import discovery
+from oauth2client import client, tools
 from oauth2client.file import Storage
 
 parser = argparse.ArgumentParser(parents=[tools.argparser])
@@ -62,10 +59,10 @@ def main():
     result = service.spreadsheets().values().get(
         spreadsheetId=spreadsheetId, range=rangeName).execute()
     values = result.get('values', [])
-
     if not values:
         raise Exception('No data found.')
-    elif flags.event == 'copied':
+
+    if flags.event == 'copied':
         for rownum, (disk, data, where, copied) in enumerate(values):
             if data.lower() == flags.data.lower() and where == "home":
                 print("%s last copied to \"%s\" on %s." % (
@@ -84,6 +81,38 @@ def main():
         ).execute()
 
         print("Updated.")
+    elif flags.event == "swapped":
+        home_disk = None
+        office_disk = None
+        for rownum, (disk, data, where, copied) in enumerate(values):
+            if data.lower() == flags.data.lower():
+                if where == "home":
+                    home_disk = rownum
+                elif where == "office":
+                    office_disk = rownum
+                    
+        if not home_disk:
+            raise Exception("Couldn't find home disk for \"%s\"", flags.data)
+
+        if not office_disk:
+            raise Exception("Couldn't find office disk for \"%s\"", flags.data)
+
+        # Swap home and office.
+        data = [{
+            "range": "C%d" % (home_disk + 1),
+            "values": [["office"]]
+        }, {
+            "range": "C%d" % (office_disk + 1),
+            "values": [["home"]]
+        }]
+
+        body = {"data": data, "valueInputOption": "USER_ENTERED"}
+        service.spreadsheets().values().batchUpdate(
+            spreadsheetId=spreadsheetId, body=body).execute()
+    else:
+        raise argparse.ArgumentError(
+            argument="event", message='Unknown event: "%s"' % flags.event)
+
 
 if __name__ == '__main__':
     main()
