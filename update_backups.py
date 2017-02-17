@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import argparse
 import os
+import subprocess
 from datetime import datetime
 
 import httplib2
@@ -46,6 +47,16 @@ def get_credentials():
     return credentials
 
 
+def tmutil(*args):
+    return subprocess.check_output(['/usr/bin/tmutil'] + list(args)).strip()
+
+
+def latest_timemachine_backup():
+    line = tmutil('latestbackup')
+    # Like "/Volumes/Time Machine 4TB 1/Backups.backupdb/MBP/2017-02-17-031920"
+    return datetime.strptime(line.split('/')[-1], '%Y-%m-%d-%H%M%S')
+
+
 def main():
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
@@ -72,7 +83,12 @@ def main():
         else:
             raise Exception("Couldn't find last copy of \"%s\"" % flags.data)
 
-        body = {"values": [[datetime.now().strftime('%Y/%m/%d')]]}
+        if flags.data == 'system':
+            latest_backup = latest_timemachine_backup().strftime('%Y/%m/%d')
+        else:
+            latest_backup = datetime.now().strftime('%Y/%m/%d')
+
+        body = {"values": [[latest_backup]]}
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheetId,
             range="D%d" % (rownum + 1),
@@ -80,7 +96,7 @@ def main():
             body=body
         ).execute()
 
-        print("Updated.")
+        print("Updated: %s." % latest_backup)
     elif flags.event == "swapped":
         home_disk = None
         office_disk = None
