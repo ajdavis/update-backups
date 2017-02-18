@@ -11,7 +11,7 @@ from oauth2client import client, tools
 from oauth2client.file import Storage
 
 parser = argparse.ArgumentParser(parents=[tools.argparser])
-parser.add_argument("event", choices=["copied", "swapped"])
+parser.add_argument("event", choices=["copy", "copied", "swapped"])
 parser.add_argument("data", choices=["system", "photos"])
 flags = parser.parse_args()
 
@@ -85,31 +85,43 @@ def spreadsheet_values():
         yield rownum + 1, disk, data, where, copied
 
 
+def on_copied():
+    for rownum, disk, data, where, copied in spreadsheet_values():
+        if data.lower() == flags.data.lower() and where == "home":
+            print("%s last copied to \"%s\" on %s." % (
+                data.title(), disk, copied))
+
+            break
+    else:
+        raise Exception("Couldn't find last copy of \"%s\"" % flags.data)
+
+    if flags.data == 'system':
+        latest_backup = latest_timemachine_backup().strftime('%Y/%m/%d')
+    else:
+        latest_backup = datetime.now().strftime('%Y/%m/%d')
+
+    body = {"values": [[latest_backup]]}
+    spreadsheets().update(
+        spreadsheetId=spreadsheetId,
+        range="D%d" % rownum,
+        valueInputOption="USER_ENTERED",
+        body=body
+    )
+
+    print("Updated: %s." % latest_backup)
+
+
 def main():
-    if flags.event == 'copied':
-        for rownum, disk, data, where, copied in spreadsheet_values():
-            if data.lower() == flags.data.lower() and where == "home":
-                print("%s last copied to \"%s\" on %s." % (
-                    data.title(), disk, copied))
-
-                break
-        else:
-            raise Exception("Couldn't find last copy of \"%s\"" % flags.data)
-
+    if flags.event == 'copy':
         if flags.data == 'system':
-            latest_backup = latest_timemachine_backup().strftime('%Y/%m/%d')
+            print('Copying....')
+            print(tmutil('startbackup', '--auto', '--block'))
         else:
-            latest_backup = datetime.now().strftime('%Y/%m/%d')
+            assert False, "Don't know how to copy \"%s\"" % flags.data
 
-        body = {"values": [[latest_backup]]}
-        spreadsheets().update(
-            spreadsheetId=spreadsheetId,
-            range="D%d" % rownum,
-            valueInputOption="USER_ENTERED",
-            body=body
-        )
-
-        print("Updated: %s." % latest_backup)
+        on_copied()
+    elif flags.event == 'copied':
+        on_copied()
     elif flags.event == "swapped":
         home_disk = None
         office_disk = None
