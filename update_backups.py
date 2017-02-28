@@ -106,7 +106,7 @@ def on_copied():
         range="D%d" % rownum,
         valueInputOption="USER_ENTERED",
         body=body
-    )
+    ).execute()
 
     print("Updated: %s." % latest_backup)
 
