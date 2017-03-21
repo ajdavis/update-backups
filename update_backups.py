@@ -129,14 +129,19 @@ def main():
             if data.lower() == flags.data.lower():
                 if where == "home":
                     home_disk = rownum
+                    home_disk_name = disk
                 elif where == "office":
                     office_disk = rownum
+                    office_disk_name = disk
 
         if not home_disk:
             raise Exception("Couldn't find home disk for \"%s\"", flags.data)
 
         if not office_disk:
             raise Exception("Couldn't find office disk for \"%s\"", flags.data)
+
+        print('"%s" is now home, "%s" at office' % (
+            office_disk_name, home_disk_name))
 
         # Swap home and office.
         data = [{
