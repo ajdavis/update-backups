@@ -6,7 +6,7 @@ import subprocess
 from datetime import datetime
 
 import httplib2
-from apiclient import discovery
+from googleapiclient import discovery
 from oauth2client import client, tools
 from oauth2client.file import Storage
 
