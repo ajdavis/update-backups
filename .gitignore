@@ -92,3 +92,5 @@ ENV/
 .ropeproject
 
 client_secret.json
+
+.idea/*
