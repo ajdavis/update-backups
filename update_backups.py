@@ -48,7 +48,8 @@ def get_credentials():
 
 
 def tmutil(*args):
-    return subprocess.check_output(['/usr/bin/tmutil'] + list(args)).strip()
+    return subprocess.check_output(
+        ['/usr/bin/tmutil'] + list(args)).decode().strip()
 
 
 def latest_timemachine_backup():
