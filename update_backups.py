@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import argparse
 import os
+import re
 import subprocess
 from datetime import datetime
 
@@ -11,7 +12,7 @@ from oauth2client import client, tools
 from oauth2client.file import Storage
 
 parser = argparse.ArgumentParser(parents=[tools.argparser])
-parser.add_argument("event", choices=["copy", "copied", "swapped"])
+parser.add_argument("event", choices=["updated", "copy", "copied", "swapped"])
 parser.add_argument("data", choices=["system", "photos"])
 flags = parser.parse_args()
 
@@ -73,21 +74,32 @@ def spreadsheets():
                            ).spreadsheets().values()
 
 
-def spreadsheet_values():
-    rangeName = 'A1:D5'
+def spreadsheet(upper_left, lower_right):
+    range_name = '%s:%s' % (upper_left, lower_right)
+    start_row = int(re.match(r'[A-Z]+(\d+)', upper_left).group(1))
     result = spreadsheets().get(spreadsheetId=spreadsheetId,
-                                range=rangeName).execute()
+                                range=range_name).execute()
 
     values = result.get('values', [])
     if not values:
         raise Exception('No data found.')
 
-    for rownum, (disk, data, where, copied) in enumerate(values):
-        yield rownum + 1, disk, data, where, copied
+    for i, row in enumerate(values):
+        yield [i + start_row] + row
+
+
+def spreadsheet_backups_values():
+    for rownum, disk, data, where, copied in spreadsheet('A1', 'D5'):
+        yield rownum, disk, data, where, copied
+
+
+def spreadsheet_data_age_values():
+    for rownum, data, last_written, copied, offsite in spreadsheet('A9', 'D10'):
+        yield rownum, data, last_written, copied, offsite
 
 
 def on_copied():
-    for rownum, disk, data, where, copied in spreadsheet_values():
+    for rownum, disk, data, where, copied in spreadsheet_backups_values():
         if data.lower() == flags.data.lower() and where == "home":
             print("%s last copied to \"%s\" on %s." % (
                 data.title(), disk, copied))
@@ -113,7 +125,26 @@ def on_copied():
 
 
 def main():
-    if flags.event == 'copy':
+    if flags.event == 'updated':
+        for rownum, data, last_written, copied, offsite in spreadsheet_data_age_values():
+            if data.lower() == flags.data.lower():
+                break
+        else:
+            raise Exception("Couldn't find data age for \"%s\"", flags.data)
+
+        # Set last_written to today.
+        data = [{
+            "range": "B%d" % rownum,
+            "values": [[datetime.now().strftime('%Y/%m/%d')]]
+        }]
+
+        body = {"data": data, "valueInputOption": "USER_ENTERED"}
+        spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheetId, body=body).execute()
+
+        print("Updated: %s." % (flags.data.lower(),))
+
+    elif flags.event == 'copy':
         if flags.data == 'system':
             print('Copying....')
             print(tmutil('startbackup', '--auto', '--block'))
@@ -123,10 +154,9 @@ def main():
         on_copied()
     elif flags.event == 'copied':
         on_copied()
-    elif flags.event == "swapped":
-        home_disk = None
-        office_disk = None
-        for rownum, disk, data, where, copied in spreadsheet_values():
+    elif flags.event == 'swapped':
+        home_disk, home_disk_name, office_disk, office_disk_name = [None] * 4
+        for rownum, disk, data, where, copied in spreadsheet_backups_values():
             if data.lower() == flags.data.lower():
                 if where == "home":
                     home_disk = rownum
